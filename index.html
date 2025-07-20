@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Memory Capsule</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold text-center mb-6">Digital Memory Capsule</h1>
+        
+        <!-- Capsule Creation Form -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+            <h2 class="text-xl font-semibold mb-4">Create a New Capsule</h2>
+            <form id="capsuleForm" class="space-y-4">
+                <input type="text" id="capsuleName" placeholder="Capsule Name" class="w-full p-2 border rounded" required>
+                <textarea id="capsuleMessage" placeholder="Your Message" class="w-full p-2 border rounded" required></textarea>
+                <input type="file" id="capsuleMedia" accept="image/*,video/*" class="w-full p-2">
+                <input type="password" id="capsulePassword" placeholder="Password (optional)" class="w-full p-2 border rounded">
+                <input type="datetime-local" id="unlockDate" class="w-full p-2 border rounded" required>
+                <label class="flex items-center">
+                    <input type="checkbox" id="isGroup" class="mr-2">
+                    <span>Group Capsule (allow others to contribute)</span>
+                </label>
+                <button type="submit" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Create Capsule</button>
+            </form>
+        </div>
+
+        <!-- Capsule List -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+            <h2 class="text-xl font-semibold mb-4">Your Capsules</h2>
+            <ul id="capsuleList" class="space-y-4"></ul>
+        </div>
+
+        <!-- 3D Canvas -->
+        <div id="capsuleCanvas" class="w-full h-96"></div>
+
+        <!-- Modal for Viewing Capsule -->
+        <div id="capsuleModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+            <div class="bg-white p-6 rounded-lg max-w-lg w-full">
+                <h2 id="modalTitle" class="text-xl font-semibold mb-4"></h2>
+                <p id="modalMessage" class="mb-4"></p>
+                <div id="modalMedia" class="mb-4"></div>
+                <div id="modalContributions" class="mb-4"></div>
+                <form id="contributionForm" class="space-y-4 hidden">
+                    <textarea id="contributionMessage" placeholder="Your Contribution" class="w-full p-2 border rounded"></textarea>
+                    <input type="file" id="contributionMedia" accept="image/*,video/*" class="w-full p-2">
+                    <button type="submit" class="bg-green-500 text-white p-2 rounded hover:bg-green-600">Add Contribution</button>
+                </form>
+                <button id="closeModal" class="bg-red-500 text-white p-2 rounded hover:bg-red-600">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Three.js
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth * 0.8, 400);
+        document.getElementById('capsuleCanvas').appendChild(renderer.domElement);
+
+        const geometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 32);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const capsule = new THREE.Mesh(geometry, material);
+        scene.add(capsule);
+        camera.position.z = 5;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            capsule.rotation.x += 0.01;
+            capsule.rotation.y += 0.01;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth * 0.8, 400);
+            camera.aspect = window.innerWidth / 400;
+            camera.updateProjectionMatrix();
+        });
+
+        // Capsule Management
+        let capsules = JSON.parse(localStorage.getItem('capsules')) || [];
+
+        function saveCapsules() {
+            localStorage.setItem('capsules', JSON.stringify(capsules));
+        }
+
+        function displayCapsules() {
+            const capsuleList = document.getElementById('capsuleList');
+            capsuleList.innerHTML = '';
+            capsules.forEach((capsule, index) => {
+                const now = new Date();
+                const unlockDate = new Date(capsule.unlockDate);
+                const isUnlocked = now >= unlockDate;
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center p-2 border-b';
+                li.innerHTML = `
+                    <span>${capsule.name} (Unlocks: ${unlockDate.toLocaleString()})</span>
+                    <button class="bg-blue-500 text-white p-1 rounded hover:bg-blue-600" 
+                            onclick="viewCapsule(${index}, ${isUnlocked})">
+                        ${isUnlocked ? 'View' : 'Contribute'}
+                    </button>
+                `;
+                capsuleList.appendChild(li);
+            });
+        }
+
+        function viewCapsule(index, isUnlocked) {
+            const capsule = capsules[index];
+            const modal = document.getElementById('capsuleModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+            const modalMedia = document.getElementById('modalMedia');
+            const modalContributions = document.getElementById('modalContributions');
+            const contributionForm = document.getElementById('contributionForm');
+
+            modalTitle.textContent = capsule.name;
+            modalMessage.textContent = capsule.message;
+            modalMedia.innerHTML = capsule.media ? `<img src="${capsule.media}" class="w-full h-auto" />` : '';
+            modalContributions.innerHTML = capsule.contributions ? 
+                capsule.contributions.map(c => `<p><strong>Contribution:</strong> ${c.message}${c.media ? `<br><img src="${c.media}" class="w-full h-auto" />` : ''}</p>`).join('') : '';
+
+            if (capsule.isGroup && !isUnlocked) {
+                contributionForm.classList.remove('hidden');
+            } else {
+                contributionForm.classList.add('hidden');
+            }
+
+            if (capsule.password && isUnlocked) {
+                const password = prompt('Enter password to view capsule:');
+                if (password !== capsule.password) {
+                    alert('Incorrect password!');
+                    return;
+                }
+            }
+
+            modal.classList.remove('hidden');
+
+            document.getElementById('contributionForm').onsubmit = (e) => {
+                e.preventDefault();
+                const message = document.getElementById('contributionMessage').value;
+                const mediaInput = document.getElementById('contributionMedia');
+                const contribution = { message };
+                if (mediaInput.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        contribution.media = e.target.result;
+                        capsule.contributions = capsule.contributions || [];
+                        capsule.contributions.push(contribution);
+                        saveCapsules();
+                        viewCapsule(index, isUnlocked);
+                    };
+                    reader.readAsDataURL(mediaInput.files[0]);
+                } else {
+                    capsule.contributions = capsule.contributions || [];
+                    capsule.contributions.push(contribution);
+                    saveCapsules();
+                    viewCapsule(index, isUnlocked);
+                }
+            };
+        }
+
+        document.getElementById('capsuleForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = document.getElementById('capsuleName').value;
+            const message = document.getElementById('capsuleMessage').value;
+            const password = document.getElementById('capsulePassword').value;
+            const unlockDate = document.getElementById('unlockDate').value;
+            const isGroup = document.getElementById('isGroup').checked;
+            const mediaInput = document.getElementById('capsuleMedia');
+
+            const capsule = { name, message, unlockDate, isGroup };
+            if (password) capsule.password = password;
+
+            if (mediaInput.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    capsule.media = e.target.result;
+                    capsules.push(capsule);
+                    saveCapsules();
+                    displayCapsules();
+                    document.getElementById('capsuleForm').reset();
+                };
+                reader.readAsDataURL(mediaInput.files[0]);
+            } else {
+                capsules.push(capsule);
+                saveCapsules();
+                displayCapsules();
+                document.getElementById('capsuleForm').reset();
+            }
+        });
+
+        document.getElementById('closeModal').addEventListener('click', () => {
+            document.getElementById('capsuleModal').classList.add('hidden');
+        });
+
+        displayCapsules();
+    </script>
+</body>
+</html>
